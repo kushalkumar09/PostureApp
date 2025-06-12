@@ -17,6 +17,16 @@ const App = () => {
           component={require('./src/screens/Onboarding/CameraPermissionScreen').default}
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name='HowItWorks'
+          component={require('./src/screens/Onboarding/HowItWorksScreen').default}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name='PostureMonitoring'
+          component={require('./src/screens/PostureMonitoringScreen').default}
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
     
