@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Posture Detection</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+  </head>
+  <body>
+    <script>
+      let detector;
+
+      async function initModel() {
+        const model = poseDetection.SupportedModels.MoveNet;
+        detector = await poseDetection.createDetector(model, {
+          modelType: 'SinglePose.Lightning',
+        });
+        window.ReactNativeWebView.postMessage(
+          JSON.stringify({status: 'model_ready'}),
+        );
+      }
+
+      async function detectPose(base64Image) {
+        const img = new Image();
+        img.src = base64Image;
+        img.onload = async () => {
+          const poses = await detector.estimatePoses(img);
+          window.ReactNativeWebView.postMessage(JSON.stringify({poses}));
+        };
+      }
+
+      window.addEventListener('message', event => {
+        const data = JSON.parse(event.data);
+        if (data.command === 'predict') {
+          detectPose(data.image);
+        }
+      });
+
+      initModel();
+    </script>
+  </body>
+</html>
