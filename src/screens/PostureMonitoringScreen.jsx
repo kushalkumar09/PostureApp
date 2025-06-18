@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, {useEffect, useState, useCallback, useRef} from 'react';
 import {
   StyleSheet,
   SafeAreaView,
@@ -10,6 +10,7 @@ import {
   Platform,
   View,
   Text,
+  Button,
 } from 'react-native';
 import {
   useCameraDevices,
@@ -20,19 +21,31 @@ import WebView from 'react-native-webview';
 import RNFS from 'react-native-fs';
 import CameraOverlay from '../components/CameraOverlay';
 import LoadingScreen from '../components/LoadingScreen';
-import { usePostureMonitoring } from '../hooks/usePostureMonitoring';
+import {usePostureMonitoring} from '../hooks/usePostureMonitoring';
+import CameraView from '../components/CameraView';
 
-const PostureMonitoringScreen = ({ navigation }) => {
+const PostureMonitoringScreen = ({navigation}) => {
   // State and refs
   const [webViewError, setWebViewError] = useState(null);
   const [webViewLoaded, setWebViewLoaded] = useState(false);
   const cameraRef = useRef(null);
   const webviewRef = useRef(null);
 
+  const webViewSource = {
+    uri:
+      Platform.OS === 'android'
+        ? 'file:///android_asset/src/html/pose.html'
+        : `${RNFS.MainBundlePath}/src/html/pose.html`,
+    baseUrl:
+      Platform.OS === 'android'
+        ? 'file:///android_asset/src/html/'
+        : `${RNFS.MainBundlePath}/src/html/`,
+  };
+
   // Camera hooks
   const devices = useCameraDevices();
-  const { hasPermission, requestPermission } = useCameraPermission();
-  
+  const {hasPermission, requestPermission} = useCameraPermission();
+
   // State management
   const [chosenCameraDevice, setChosenCameraDevice] = useState(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -47,21 +60,96 @@ const PostureMonitoringScreen = ({ navigation }) => {
     postureScore,
     alertsCount,
     handleStartStop,
-    resetSession,
   } = usePostureMonitoring();
 
-  // WebView message handler with debounce
-  const handleMessage = useCallback((event) => {
+  const handleMessage = useCallback(event => {
     try {
       const data = JSON.parse(event.nativeEvent.data);
-      console.log('WebView message:', data);
-      // Process pose data here
+
+      console.log('Received from WebView:', {
+        type: data.type,
+        timestamp: data.timestamp,
+        // Other relevant fields
+      });
+
+      // Handle different message types
+      switch (data.type) {
+        case 'log':
+          console.log('[WebView]', data.message);
+          break;
+
+        case 'pose':
+          // Process pose data with timestamp
+          const poseData = {
+            ...data,
+            timestamp: Date.now(),
+            platform: Platform.OS,
+          };
+          handlePoseData(poseData);
+          break;
+
+        case 'error':
+          console.error('[WebView Error]', data.message);
+          setWebViewError(data.message);
+          break;
+
+        case 'ready':
+          console.log('WebView model loaded successfully');
+          setWebViewLoaded(true);
+          
+
+        case 'ping':
+          console.log('WebView ping received');
+          break;
+
+        default:
+          console.log('Unknown WebView message:', data);
+      }
     } catch (error) {
       console.error('Message parsing error:', error);
+      setWebViewError('Failed to parse WebView message');
     }
   }, []);
 
+  const captureAndSendPhoto = async () => {
+    try {
+      const photo = await cameraRef.current.takePhoto({
+        qualityPrioritization: 'speed',
+        skipMetadata: true,
+      });
+
+      console.log('Photo taken:', photo);
+
+      const path = photo.path;
+      const base64 = await RNFS.readFile(path, 'base64');
+
+      const message = {
+        command: 'predict',
+        image: `data:image/jpeg;base64,${base64}`,
+      };
+      console.log('Sending photo to WebView');
+      webviewRef.current.postMessage(JSON.stringify(message));
+      console.log('Photo sent to WebView');
+    } catch (error) {
+      console.warn('Photo error:', error);
+    }
+  };
+
   // Camera setup and permission handling
+  useEffect(() => {
+    let interval;
+    if (isMonitoring && webViewLoaded && cameraRef.current) {
+      interval = setInterval(() => {
+        console.log('📸 Sending frame to WebView...');
+        captureAndSendPhoto();
+      }, 3000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isMonitoring, webViewLoaded, cameraRef]);
+
   useEffect(() => {
     const setupCamera = async () => {
       if (!hasPermission) {
@@ -71,60 +159,49 @@ const PostureMonitoringScreen = ({ navigation }) => {
             'Camera Access Required',
             'Please enable camera access in settings',
             [
-              { text: 'Settings', onPress: Linking.openSettings },
-              { text: 'Cancel', onPress: () => navigation.goBack() },
-            ]
+              {text: 'Settings', onPress: Linking.openSettings},
+              {text: 'Cancel', onPress: () => navigation.goBack()},
+            ],
           );
           return;
         }
       }
 
-      const device = devices.find(d => d.position === cameraPosition) || devices[0];
-      if (device) setChosenCameraDevice(device);
+      const device =
+        devices.find(d => d.position === cameraPosition) || devices[0];
+      if (device) {
+        setChosenCameraDevice(device);
+        setIsCameraActive(true);
+      }
     };
-
     setupCamera();
   }, [hasPermission, devices, cameraPosition]);
 
   if (!chosenCameraDevice || !hasPermission) {
-    return (
-      <LoadingScreen 
-        onRetry={requestPermission}
-      />
-    );
+    return <LoadingScreen onRetry={requestPermission} />;
   }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
-      <Camera
+
+      <CameraView
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         device={chosenCameraDevice}
         isActive={isCameraActive}
-        preset="medium"
-        fps={30}
-        format={chosenCameraDevice.formats[0]}
       />
 
       <WebView
         ref={webviewRef}
-        source={{
-          uri: Platform.OS === 'android'
-            ? 'file:///android_asset/src/html/pose.html'
-            : `${RNFS.MainBundlePath}/src/html/pose.html`,
-          baseUrl: Platform.OS === 'android'
-            ? 'file:///android_asset/src/html/'
-            : `${RNFS.MainBundlePath}/src/html/`
-        }}
+        source={webViewSource}
         onMessage={handleMessage}
         onLoad={() => setWebViewLoaded(true)}
-        onError={(e) => setWebViewError(e.nativeEvent.description)}
-        javaScriptEnabled
-        domStorageEnabled
-        startInLoadingState
-        style={{ height: 0, width: 0 }}
+        onError={e => setWebViewError(e.nativeEvent.description)}
+        javaScriptEnabled={true}
+        domStorageEnabled={true}
+        startInLoadingState={true}
+        style={{height: 1, width: 1}}
       />
 
       {webViewError && (
@@ -142,9 +219,35 @@ const PostureMonitoringScreen = ({ navigation }) => {
         alertsCount={alertsCount}
         cameraPosition={cameraPosition}
         onBack={() => navigation.goBack()}
-        onToggleCamera={() => setCameraPosition(p => p === 'front' ? 'back' : 'front')}
+        onToggleCamera={() =>
+          setCameraPosition(p => (p === 'front' ? 'back' : 'front'))
+        }
         onToggleControls={() => setShowControls(s => !s)}
         onStartStop={handleStartStop}
+      />
+      <Button
+        title="Send Test Message"
+        onPress={() => {
+          if (webviewRef.current) {
+            console.log('Attempting to send test message...');
+
+            // Send as simple string first for testing
+            webviewRef.current.postMessage('simple-test-message');
+
+            // Then try JSON
+            setTimeout(() => {
+              webviewRef.current.postMessage(
+                JSON.stringify({
+                  type: 'test',
+                  message: 'test123',
+                  timestamp: Date.now(),
+                }),
+              );
+            }, 1000);
+          } else {
+            console.warn('WebView ref is not available');
+          }
+        }}
       />
     </SafeAreaView>
   );

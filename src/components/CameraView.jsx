@@ -9,8 +9,10 @@ const CameraView = forwardRef(({ device, isActive }, ref) => {
       style={StyleSheet.absoluteFill}
       device={device}
       isActive={isActive}
-      // frameProcessor={yourPostureDetectionFrameProcessor}
-      // frameProcessorFps={15}
+      preset="medium"
+      photo={true}
+      fps={30}
+      format={device.formats[0]}
     />
   )
 })

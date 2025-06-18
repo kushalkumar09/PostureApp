@@ -2,41 +2,176 @@
 <html>
   <head>
     <title>Posture Detection</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap:" />
+
+    <!-- TensorFlow.js & Pose Detection -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
   </head>
+
   <body>
     <script>
-      let detector;
+      // Notify React Native that WebView has loaded
 
-      async function initModel() {
-        const model = poseDetection.SupportedModels.MoveNet;
-        detector = await poseDetection.createDetector(model, {
-          modelType: 'SinglePose.Lightning',
-        });
+      window.addEventListener('load', () => {
         window.ReactNativeWebView.postMessage(
-          JSON.stringify({status: 'model_ready'}),
+          JSON.stringify({
+            type: 'log',
+            message: '✅ WebView script loaded!',
+          }),
         );
-      }
-
-      async function detectPose(base64Image) {
-        const img = new Image();
-        img.src = base64Image;
-        img.onload = async () => {
-          const poses = await detector.estimatePoses(img);
-          window.ReactNativeWebView.postMessage(JSON.stringify({poses}));
-        };
-      }
-
-      window.addEventListener('message', event => {
-        const data = JSON.parse(event.data);
-        if (data.command === 'predict') {
-          detectPose(data.image);
-        }
       });
 
+      let detector = null;
+
+      async function initModel() {
+        try {
+          const model = poseDetection.SupportedModels.MoveNet;
+          detector = await poseDetection.createDetector(model, {
+            modelType: 'SinglePose.Lightning',
+          });
+
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: 'ready',
+              status: 'model_ready',
+              message: '✅ MoveNet loaded successfully',
+              timestamp: Date.now(),
+            }),
+          );
+        } catch (err) {
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: 'error',
+              message: '❌ Failed to load MoveNet: ' + err.message,
+            }),
+          );
+        }
+      }
+
+      function analyzePosture(pose) {
+        const keypoints = pose[0]?.keypoints;
+        if (!keypoints) return 'unknown';
+
+        const leftShoulder = keypoints.find(p => p.name === 'left_shoulder');
+        const leftEar = keypoints.find(p => p.name === 'left_ear');
+
+        if (leftShoulder && leftEar) {
+          const diff = Math.abs(leftShoulder.y - leftEar.y);
+          return diff < 30 ? 'good' : 'bad';
+        }
+
+        return 'unknown';
+      }
+
+      async function predictPoseFromBase64(base64Image) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.src = base64Image;
+          img.crossOrigin = 'anonymous';
+
+          img.onload = async () => {
+            try {
+              if (!detector) {
+                const errMsg = 'Detector not initialized';
+                window.ReactNativeWebView.postMessage(
+                  JSON.stringify({type: 'error', message: errMsg}),
+                );
+                return reject(errMsg);
+              }
+
+              img.style.display = 'none';
+              document.body.appendChild(img);
+
+              const pose = await detector.estimatePoses(img);
+
+              window.ReactNativeWebView.postMessage(
+                JSON.stringify({
+                  type: 'log',
+                  message: '📸 Pose prediction completed',
+                }),
+              );
+
+              const posture = analyzePosture(pose);
+
+              window.ReactNativeWebView.postMessage(
+                JSON.stringify({
+                  type: 'posture_analysis',
+                  status: 'posture_analysis',
+                  posture,
+                  pose,
+                }),
+              );
+
+              document.body.removeChild(img);
+              resolve(pose);
+            } catch (err) {
+              window.ReactNativeWebView.postMessage(
+                JSON.stringify({
+                  type: 'error',
+                  message: '❌ Pose estimation error: ' + err.message,
+                }),
+              );
+              reject(err);
+            }
+          };
+
+          img.onerror = () => {
+            const msg = 'Failed to load image';
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({
+                type: 'error',
+                message: '❌ ' + msg,
+              }),
+            );
+            reject(new Error(msg));
+          };
+        });
+      }
+
+      function handleLogMessage(event) {
+        try {
+          // WebView messages come through the ReactNativeWebView interface
+          // The actual data is in event.data (already parsed if sent as JSON)
+          const message = event.data;
+
+          console.log('Received raw message:', message); // Check browser console
+
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: 'log',
+              message: '📩 Received message from React Native',
+              receivedData: message, // Include the actual received data
+              timestamp: Date.now(),
+            }),
+          );
+        } catch (err) {
+          console.error('Handler error:', err); // Check browser console
+
+          window.ReactNativeWebView.postMessage(
+            JSON.stringify({
+              type: 'error',
+              message: '❌ pose.html error: ' + err.message,
+              errorDetails: JSON.stringify(err),
+              timestamp: Date.now(),
+            }),
+          );
+        }
+      }
+      window.ReactNativeWebView.onMessage = handleLogMessage;
+      document.addEventListener("message", handleLogMessage);
+      window.ReactNativeWebView.postMessage(
+        JSON.stringify({
+          type: 'ping',
+          timestamp: Date.now(),
+        }),
+      );
       initModel();
     </script>
   </body>
