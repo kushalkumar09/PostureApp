@@ -62,30 +62,27 @@ const PostureMonitoringScreen = ({navigation}) => {
     handleStartStop,
   } = usePostureMonitoring();
 
-  const handleMessage = useCallback(event => {
+  const handleMessage = useCallback(async event => {
     try {
-      const data = JSON.parse(event.nativeEvent.data);
+      const data = await JSON.parse(event.nativeEvent.data);
+      console.log('WebView message received:', data);
 
       console.log('Received from WebView:', {
         type: data.type,
         timestamp: data.timestamp,
-        // Other relevant fields
+        message: data.message,
+        from: data.from,
       });
 
       // Handle different message types
       switch (data.type) {
         case 'log':
-          console.log('[WebView]', data.message);
+          console.log('[WebView log]', data.message);
           break;
 
         case 'pose':
           // Process pose data with timestamp
-          const poseData = {
-            ...data,
-            timestamp: Date.now(),
-            platform: Platform.OS,
-          };
-          handlePoseData(poseData);
+          console.log('[WebView pose data]', data);
           break;
 
         case 'error':
@@ -96,7 +93,6 @@ const PostureMonitoringScreen = ({navigation}) => {
         case 'ready':
           console.log('WebView model loaded successfully');
           setWebViewLoaded(true);
-          
 
         case 'ping':
           console.log('WebView ping received');
@@ -126,6 +122,7 @@ const PostureMonitoringScreen = ({navigation}) => {
       const message = {
         command: 'predict',
         image: `data:image/jpeg;base64,${base64}`,
+        from: 'sending photo',
       };
       console.log('Sending photo to WebView');
       webviewRef.current.postMessage(JSON.stringify(message));
@@ -230,20 +227,14 @@ const PostureMonitoringScreen = ({navigation}) => {
         onPress={() => {
           if (webviewRef.current) {
             console.log('Attempting to send test message...');
-
-            // Send as simple string first for testing
-            webviewRef.current.postMessage('simple-test-message');
-
-            // Then try JSON
-            setTimeout(() => {
-              webviewRef.current.postMessage(
-                JSON.stringify({
-                  type: 'test',
-                  message: 'test123',
-                  timestamp: Date.now(),
-                }),
-              );
-            }, 1000);
+            webviewRef.current.postMessage(
+              JSON.stringify({
+                type: 'log',
+                message: 'test123',
+                from: 'Button Press',
+                timestamp: Date.now(),
+              }),
+            );
           } else {
             console.warn('WebView ref is not available');
           }

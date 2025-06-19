@@ -137,38 +137,72 @@
 
       function handleLogMessage(event) {
         try {
-          // WebView messages come through the ReactNativeWebView interface
-          // The actual data is in event.data (already parsed if sent as JSON)
-          const message = event.data;
+          const rawData = event.data;
 
-          console.log('Received raw message:', message); // Check browser console
-
+          // Confirm receipt of raw data
           window.ReactNativeWebView.postMessage(
             JSON.stringify({
               type: 'log',
               message: '📩 Received message from React Native',
-              receivedData: message, // Include the actual received data
-              timestamp: Date.now(),
+              dataFrom: rawData.from,
             }),
           );
-        } catch (err) {
-          console.error('Handler error:', err); // Check browser console
 
+          // Parse the message if it's a JSON string
+          const message =
+          typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+
+          
+
+          if (message.command === 'predict' && message.image) {
+            predictPoseFromBase64(message.image)
+              .then(() => {
+                window.ReactNativeWebView.postMessage(
+                  JSON.stringify({
+                    type: 'pose',
+                    message: '✅ Pose prediction completed',
+                    pose: message.pose || "no pose data",
+                    from:"handleLogMessage",
+                    timestamp: Date.now(),
+                  }),
+                );
+              })
+              .catch(err => {
+                window.ReactNativeWebView.postMessage(
+                  JSON.stringify({
+                    type: 'error',
+                    message: '❌ Pose prediction failed: ' + err.message,
+                    timestamp: Date.now(),
+                  }),
+                );
+              });
+          } else {
+            window.ReactNativeWebView.postMessage(
+              JSON.stringify({
+                type: 'log',
+                message: message.message || 'No message provided',
+                from: message.from || 'unknown',
+                timestamp: Date.now(),
+              }),
+            );
+          }
+        } catch (err) {
           window.ReactNativeWebView.postMessage(
             JSON.stringify({
               type: 'error',
-              message: '❌ pose.html error: ' + err.message,
-              errorDetails: JSON.stringify(err),
+              message: '❌ Error in handleLogMessage: ' + err.message,
               timestamp: Date.now(),
             }),
           );
         }
       }
+
       window.ReactNativeWebView.onMessage = handleLogMessage;
-      document.addEventListener("message", handleLogMessage);
+      document.addEventListener('message', handleLogMessage);
       window.ReactNativeWebView.postMessage(
         JSON.stringify({
           type: 'ping',
+          message: '📡 pose.html loaded and ready',
           timestamp: Date.now(),
         }),
       );
