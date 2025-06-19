@@ -51,6 +51,7 @@ const PostureMonitoringScreen = ({navigation}) => {
   const [isCameraActive, setIsCameraActive] = useState(false);
   const [cameraPosition, setCameraPosition] = useState('front');
   const [showControls, setShowControls] = useState(true);
+  const [postureData, setPostureData] = useState(null);
 
   // Posture monitoring
   const {
@@ -60,7 +61,7 @@ const PostureMonitoringScreen = ({navigation}) => {
     postureScore,
     alertsCount,
     handleStartStop,
-  } = usePostureMonitoring();
+  } = usePostureMonitoring(postureData);
 
   const handleMessage = useCallback(async event => {
     try {
@@ -80,14 +81,10 @@ const PostureMonitoringScreen = ({navigation}) => {
           console.log('[WebView log]', data.message);
           break;
 
-        case 'pose':
+        case 'posture_analysis':
           // Process pose data with timestamp
           console.log('[WebView pose data]', data);
-          break;
-
-        case 'error':
-          console.error('[WebView Error]', data.message);
-          setWebViewError(data.message);
+          setPostureData(() => data.posture);
           break;
 
         case 'ready':
@@ -96,6 +93,11 @@ const PostureMonitoringScreen = ({navigation}) => {
 
         case 'ping':
           console.log('WebView ping received');
+          break;
+
+        case 'error':
+          console.error('[WebView Error]', data.message);
+          setWebViewError(data.message);
           break;
 
         default:
@@ -139,7 +141,7 @@ const PostureMonitoringScreen = ({navigation}) => {
       interval = setInterval(() => {
         console.log('📸 Sending frame to WebView...');
         captureAndSendPhoto();
-      }, 3000);
+      }, 2000);
     }
 
     return () => {
@@ -211,8 +213,7 @@ const PostureMonitoringScreen = ({navigation}) => {
         showControls={showControls}
         isMonitoring={isMonitoring}
         sessionTime={sessionTime}
-        postureStatus={postureStatus}
-        postureScore={postureScore}
+        postureData={postureData} // ✅ pass here
         alertsCount={alertsCount}
         cameraPosition={cameraPosition}
         onBack={() => navigation.goBack()}
@@ -221,24 +222,6 @@ const PostureMonitoringScreen = ({navigation}) => {
         }
         onToggleControls={() => setShowControls(s => !s)}
         onStartStop={handleStartStop}
-      />
-      <Button
-        title="Send Test Message"
-        onPress={() => {
-          if (webviewRef.current) {
-            console.log('Attempting to send test message...');
-            webviewRef.current.postMessage(
-              JSON.stringify({
-                type: 'log',
-                message: 'test123',
-                from: 'Button Press',
-                timestamp: Date.now(),
-              }),
-            );
-          } else {
-            console.warn('WebView ref is not available');
-          }
-        }}
       />
     </SafeAreaView>
   );

@@ -1,53 +1,38 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useCallback } from "react"
-import { Alert } from "react-native"
+import { useState, useEffect, useCallback } from "react";
+import { Alert } from "react-native";
 
-export const usePostureMonitoring = () => {
-  const [isMonitoring, setIsMonitoring] = useState(false)
-  const [sessionTime, setSessionTime] = useState(0)
-  const [postureStatus, setPostureStatus] = useState("good")
-  const [postureScore, setPostureScore] = useState(100)
-  const [alertsCount, setAlertsCount] = useState(0)
+export const usePostureMonitoring = (postureData) => {
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const [sessionTime, setSessionTime] = useState(0);
+  const [postureStatus, setPostureStatus] = useState("unknown");
+  const [postureScore, setPostureScore] = useState(100);
+  const [alertsCount, setAlertsCount] = useState(0);
 
-  // Timer effect for session tracking
+  // Start session timer
   useEffect(() => {
-    let interval
+    let interval;
     if (isMonitoring) {
       interval = setInterval(() => {
-        setSessionTime((prev) => prev + 1)
-      }, 1000)
+        setSessionTime((prev) => prev + 1);
+      }, 1000);
     }
-    return () => clearInterval(interval)
-  }, [isMonitoring])
+    return () => clearInterval(interval);
+  }, [isMonitoring]);
 
-  // Simulate posture detection changes
+  // Update posture from real WebView data
   useEffect(() => {
-    if (isMonitoring) {
-      const interval = setInterval(() => {
-        const random = Math.random()
-        let newStatus
-        let newScore
+    if (isMonitoring && postureData) {
+      const { posture, score } = postureData;
+      setPostureStatus(posture || "unknown");
+      setPostureScore(score || 100);
 
-        if (random > 0.7) {
-          newStatus = "poor"
-          newScore = Math.floor(Math.random() * 20) + 50
-          setAlertsCount((prev) => prev + 1)
-        } else if (random > 0.4) {
-          newStatus = "warning"
-          newScore = Math.floor(Math.random() * 15) + 70
-        } else {
-          newStatus = "good"
-          newScore = Math.floor(Math.random() * 15) + 85
-        }
-
-        setPostureStatus(newStatus)
-        setPostureScore(newScore)
-      }, 5000)
-
-      return () => clearInterval(interval)
+      if (posture === "poor" || posture === "bad") {
+        setAlertsCount((prev) => prev + 1);
+      }
     }
-  }, [isMonitoring])
+  }, [postureData, isMonitoring]);
 
   const handleStartStop = useCallback(() => {
     if (isMonitoring) {
@@ -55,27 +40,24 @@ export const usePostureMonitoring = () => {
         { text: "Cancel", style: "cancel" },
         {
           text: "End Session",
-          onPress: () => {
-            setIsMonitoring(false)
-            // Here you would save session data
-          },
+          onPress: () => setIsMonitoring(false),
         },
-      ])
+      ]);
     } else {
-      setIsMonitoring(true)
-      setSessionTime(0)
-      setAlertsCount(0)
-      setPostureScore(100)
-      setPostureStatus("good")
+      setIsMonitoring(true);
+      setSessionTime(0);
+      setAlertsCount(0);
+      setPostureScore(100);
+      setPostureStatus("good");
     }
-  }, [isMonitoring])
+  }, [isMonitoring]);
 
   const resetSession = useCallback(() => {
-    setSessionTime(0)
-    setAlertsCount(0)
-    setPostureScore(100)
-    setPostureStatus("good")
-  }, [])
+    setSessionTime(0);
+    setAlertsCount(0);
+    setPostureScore(100);
+    setPostureStatus("good");
+  }, []);
 
   return {
     isMonitoring,
@@ -85,5 +67,5 @@ export const usePostureMonitoring = () => {
     alertsCount,
     handleStartStop,
     resetSession,
-  }
-}
+  };
+};

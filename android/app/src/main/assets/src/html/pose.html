@@ -6,8 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap:"
-    />
+      content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap:" />
 
     <!-- TensorFlow.js & Pose Detection -->
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
@@ -21,73 +20,237 @@
       let detector = null;
 
       // Notify React Native that the WebView is ready
-      window.addEventListener("load", () => {
+      window.addEventListener('load', () => {
         window.ReactNativeWebView.postMessage(
-          JSON.stringify({ type: "log", message: "✅ WebView script loaded!" })
+          JSON.stringify({type: 'log', message: '✅ WebView script loaded!'}),
         );
       });
 
       // Load TFJS with CPU backend and initialize model
       async function prepareModel() {
         try {
-          await tf.setBackend("cpu");
+          await tf.setBackend('cpu');
           await tf.ready();
 
           const model = poseDetection.SupportedModels.MoveNet;
           detector = await poseDetection.createDetector(model, {
-            modelType: "SinglePose.Lightning",
+            modelType: 'SinglePose.Lightning',
           });
 
           window.ReactNativeWebView.postMessage(
             JSON.stringify({
-              type: "ready",
-              status: "model_ready",
-              message: "✅ MoveNet loaded with CPU backend",
+              type: 'ready',
+              status: 'model_ready',
+              message: '✅ MoveNet loaded with CPU backend',
               timestamp: Date.now(),
-            })
+            }),
           );
         } catch (err) {
           window.ReactNativeWebView.postMessage(
             JSON.stringify({
-              type: "error",
-              message: "❌ Model init failed: " + err.message,
-            })
+              type: 'error',
+              message: '❌ Model init failed: ' + err.message,
+            }),
           );
         }
       }
 
       function analyzePosture(pose) {
         const keypoints = pose[0]?.keypoints;
-        if (!keypoints) return "unknown";
-
-        const leftShoulder = keypoints.find((p) => p.name === "left_shoulder");
-        const leftEar = keypoints.find((p) => p.name === "left_ear");
-
-        if (leftShoulder && leftEar) {
-          const diff = Math.abs(leftShoulder.y - leftEar.y);
-          return diff < 30 ? "good" : "bad";
+        if (!keypoints) {
+          return {
+            posture: 'unknown',
+            confidence: 0,
+            reason: 'No keypoints detected',
+            score: 0,
+            details: {},
+          };
         }
 
-        return "unknown";
+        // Helper function to get reliable keypoints
+        const getKeypoint = (name, minConfidence = 0.4) =>
+          keypoints.find(p => p.name === name && p.score > minConfidence);
+
+        // Get all required keypoints
+        const leftShoulder = getKeypoint('left_shoulder');
+        const rightShoulder = getKeypoint('right_shoulder');
+        const leftEar = getKeypoint('left_ear');
+        const rightEar = getKeypoint('right_ear');
+        const nose = getKeypoint('nose');
+        const leftHip = getKeypoint('left_hip');
+        const rightHip = getKeypoint('right_hip');
+
+        // Check if we have minimum required keypoints
+        if (!leftShoulder || !rightShoulder) {
+          return {
+            posture: 'unknown',
+            confidence: 0,
+            reason: 'Shoulders not clearly visible',
+            score: 0,
+            details: {},
+          };
+        }
+
+        // Calculate confidence based on keypoint visibility and quality
+        const allKeypoints = [
+          leftShoulder,
+          rightShoulder,
+          leftEar,
+          rightEar,
+          nose,
+          leftHip,
+          rightHip,
+        ];
+        const visibleKeypoints = allKeypoints.filter(Boolean);
+        const avgConfidence =
+          visibleKeypoints.reduce((sum, kp) => sum + kp.score, 0) /
+          visibleKeypoints.length;
+        const confidence = Math.min(avgConfidence, visibleKeypoints.length / 7);
+
+        // Analysis metrics
+        let issues = [];
+        let score = 100;
+        let posture = 'good';
+
+        // 1. Shoulder alignment analysis
+        const shoulderHeightDiff = Math.abs(leftShoulder.y - rightShoulder.y);
+        if (shoulderHeightDiff > 40) {
+          issues.push('Significant shoulder imbalance');
+          score -= 30;
+        } else if (shoulderHeightDiff > 20) {
+          issues.push('Slight shoulder imbalance');
+          score -= 15;
+        }
+
+        // 2. Head position analysis (forward head posture)
+        let headForwardness = 0;
+        if (nose && leftShoulder && rightShoulder) {
+          const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
+          headForwardness = Math.abs(nose.x - shoulderMidX);
+
+          if (headForwardness > 50) {
+            issues.push('Head is significantly forward');
+            score -= 25;
+          } else if (headForwardness > 25) {
+            issues.push('Slight forward head posture');
+            score -= 10;
+          }
+        } else if (leftEar && leftShoulder) {
+          // Fallback using ear-shoulder alignment
+          const earShoulderDiff = leftEar.x - leftShoulder.x;
+          if (Math.abs(earShoulderDiff) > 40) {
+            issues.push('Head position needs adjustment');
+            score -= 20;
+          }
+        } else if (rightEar && rightShoulder) {
+          const earShoulderDiff = rightShoulder.x - rightEar.x;
+          if (Math.abs(earShoulderDiff) > 40) {
+            issues.push('Head position needs adjustment');
+            score -= 20;
+          }
+        }
+
+        // 3. Spine alignment analysis (if hips are visible)
+        if (leftHip && rightHip && leftShoulder && rightShoulder) {
+          const shoulderMidX = (leftShoulder.x + rightShoulder.x) / 2;
+          const hipMidX = (leftHip.x + rightHip.x) / 2;
+          const spineDeviation = Math.abs(shoulderMidX - hipMidX);
+
+          if (spineDeviation > 50) {
+            issues.push('Poor spine alignment');
+            score -= 25;
+          } else if (spineDeviation > 25) {
+            issues.push('Slight spine misalignment');
+            score -= 10;
+          }
+        }
+
+        // 4. Overall shoulder posture (slouching detection)
+        if (leftShoulder && rightShoulder && (leftEar || rightEar || nose)) {
+          const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
+          let headY = 0;
+
+          if (nose) {
+            headY = nose.y;
+          } else if (leftEar && rightEar) {
+            headY = (leftEar.y + rightEar.y) / 2;
+          } else if (leftEar) {
+            headY = leftEar.y;
+          } else if (rightEar) {
+            headY = rightEar.y;
+          }
+
+          const headShoulderDistance = shoulderMidY - headY;
+          if (headShoulderDistance < 80) {
+            issues.push('Shoulders appear hunched');
+            score -= 20;
+          }
+        }
+
+        // Determine final posture classification
+        score = Math.max(0, Math.min(100, score));
+
+        if (score >= 80) {
+          posture = 'good';
+        } else if (score >= 60) {
+          posture = 'fair';
+        } else {
+          posture = 'bad';
+        }
+
+        // Generate reason message
+        let reason;
+        if (issues.length === 0) {
+          reason = 'Excellent posture! Shoulders and head are well aligned';
+        } else if (issues.length === 1) {
+          reason = issues[0];
+        } else {
+          reason = `Multiple issues detected: ${issues.join(', ')}`;
+        }
+
+        return {
+          posture,
+          confidence: Math.round(confidence * 100) / 100,
+          reason,
+          score,
+          details: {
+            shoulderAlignment: shoulderHeightDiff
+              ? Math.round(shoulderHeightDiff)
+              : null,
+            headForwardness: headForwardness
+              ? Math.round(headForwardness)
+              : null,
+            issues: issues,
+            keypointsDetected: visibleKeypoints.length,
+            measurements: {
+              shoulderHeightDiff: shoulderHeightDiff
+                ? Math.round(shoulderHeightDiff)
+                : null,
+              headPosition: headForwardness
+                ? Math.round(headForwardness)
+                : null,
+            },
+          },
+        };
       }
 
       async function predictPoseFromBase64(base64Image) {
         return new Promise((resolve, reject) => {
           const img = new Image();
           img.src = base64Image;
-          img.crossOrigin = "anonymous";
+          img.crossOrigin = 'anonymous';
 
           img.onload = async () => {
             try {
               if (!detector) {
-                const msg = "Detector not initialized";
+                const msg = 'Detector not initialized';
                 window.ReactNativeWebView.postMessage(
-                  JSON.stringify({ type: "error", message: msg })
+                  JSON.stringify({type: 'error', message: msg}),
                 );
                 return reject(msg);
               }
 
-              img.style.display = "none";
+              img.style.display = 'none';
               document.body.appendChild(img);
 
               const pose = await detector.estimatePoses(img);
@@ -96,12 +259,12 @@
 
               window.ReactNativeWebView.postMessage(
                 JSON.stringify({
-                  type: "posture_analysis",
-                  status: "success",
+                  type: 'posture_analysis',
+                  status: 'success',
                   posture,
                   pose,
                   timestamp: Date.now(),
-                })
+                }),
               );
 
               document.body.removeChild(img);
@@ -109,18 +272,18 @@
             } catch (err) {
               window.ReactNativeWebView.postMessage(
                 JSON.stringify({
-                  type: "error",
-                  message: "❌ Pose estimation error: " + err.message,
-                })
+                  type: 'error',
+                  message: '❌ Pose estimation error: ' + err.message,
+                }),
               );
               reject(err);
             }
           };
 
           img.onerror = () => {
-            const msg = "❌ Failed to load image";
+            const msg = '❌ Failed to load image';
             window.ReactNativeWebView.postMessage(
-              JSON.stringify({ type: "error", message: msg })
+              JSON.stringify({type: 'error', message: msg}),
             );
             reject(new Error(msg));
           };
@@ -131,60 +294,60 @@
         try {
           const rawData = event.data;
           const message =
-            typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+            typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
 
-          if (message.command === "predict" && message.image) {
+          if (message.command === 'predict' && message.image) {
             predictPoseFromBase64(message.image)
               .then(() => {
                 window.ReactNativeWebView.postMessage(
                   JSON.stringify({
-                    type: "log",
-                    message: "✅ Pose prediction completed",
+                    type: 'log',
+                    message: '✅ Pose prediction completed',
                     timestamp: Date.now(),
-                  })
+                  }),
                 );
               })
-              .catch((err) => {
+              .catch(err => {
                 window.ReactNativeWebView.postMessage(
                   JSON.stringify({
-                    type: "error",
-                    message: "❌ Prediction failed: " + err.message,
+                    type: 'error',
+                    message: '❌ Prediction failed: ' + err.message,
                     timestamp: Date.now(),
-                  })
+                  }),
                 );
               });
           } else {
             // Generic message logging
             window.ReactNativeWebView.postMessage(
               JSON.stringify({
-                type: "log",
-                message: message.message || "No message provided",
-                from: message.from || "unknown",
+                type: 'log',
+                message: message.message || 'No message provided',
+                from: message.from || 'unknown',
                 timestamp: Date.now(),
-              })
+              }),
             );
           }
         } catch (err) {
           window.ReactNativeWebView.postMessage(
             JSON.stringify({
-              type: "error",
-              message: "❌ Error in message handler: " + err.message,
+              type: 'error',
+              message: '❌ Error in message handler: ' + err.message,
               timestamp: Date.now(),
-            })
+            }),
           );
         }
       }
 
       window.ReactNativeWebView.onMessage = handleLogMessage;
-      document.addEventListener("message", handleLogMessage);
+      document.addEventListener('message', handleLogMessage);
 
       // Notify React Native immediately and start model prep
       window.ReactNativeWebView.postMessage(
         JSON.stringify({
-          type: "ping",
-          message: "📡 pose.html loaded and ready",
+          type: 'ping',
+          message: '📡 pose.html loaded and ready',
           timestamp: Date.now(),
-        })
+        }),
       );
 
       prepareModel();
