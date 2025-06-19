@@ -9,55 +9,84 @@ const PostureIndicator = ({
   reason = null 
 }) => {
   const animatedValue = useRef(new Animated.Value(0)).current;
-  const scaleValue = useRef(new Animated.Value(0.8)).current;
+  const scaleValue = useRef(new Animated.Value(0.9)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
+  const pulseValue = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Animate entrance
     Animated.parallel([
       Animated.timing(opacityValue, {
         toValue: 1,
-        duration: 300,
+        duration: 400,
         useNativeDriver: true,
       }),
       Animated.spring(scaleValue, {
         toValue: 1,
-        tension: 100,
-        friction: 8,
+        tension: 80,
+        friction: 10,
         useNativeDriver: true,
       }),
       Animated.timing(animatedValue, {
         toValue: postureScore,
-        duration: 800,
+        duration: 1200,
         useNativeDriver: false,
       })
     ]).start();
-  }, [postureScore]);
 
-  // Create circular progress animation
-  const circumference = 2 * Math.PI * 60; // radius = 60
+    // Subtle pulse for poor posture
+    if (postureStatus === 'bad') {
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseValue, {
+            toValue: 1.05,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseValue, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      pulse.start();
+      return () => pulse.stop();
+    }
+  }, [postureScore, postureStatus]);
+
+  const getModernColor = (status) => {
+    switch (status) {
+      case 'good': return '#00D4AA';
+      case 'fair': return '#FFB800';
+      case 'bad': return '#FF6B6B';
+      default: return '#8B9DC3';
+    }
+  };
+
+  const getBackgroundColor = (status) => {
+    switch (status) {
+      case 'good': return 'rgba(0, 212, 170, 0.12)';
+      case 'fair': return 'rgba(255, 184, 0, 0.12)';
+      case 'bad': return 'rgba(255, 107, 107, 0.12)';
+      default: return 'rgba(139, 157, 195, 0.12)';
+    }
+  };
+
+  const getScoreGrade = (score) => {
+    if (score >= 90) return 'A+';
+    if (score >= 80) return 'A';
+    if (score >= 70) return 'B';
+    if (score >= 60) return 'C';
+    if (score >= 50) return 'D';
+    return 'F';
+  };
+
+  const circumference = 2 * Math.PI * 55;
+  const strokeDasharray = circumference;
   const strokeDashoffset = animatedValue.interpolate({
     inputRange: [0, 100],
     outputRange: [circumference, 0],
   });
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'good': return '✅';
-      case 'fair': return '⚠️';
-      case 'bad': return '❌';
-      default: return '❓';
-    }
-  };
-
-  const getGradientColors = (status) => {
-    switch (status) {
-      case 'good': return ['#10B981', '#059669'];
-      case 'fair': return ['#F59E0B', '#D97706'];
-      case 'bad': return ['#EF4444', '#DC2626'];
-      default: return ['#6B7280', '#4B5563'];
-    }
-  };
 
   return (
     <Animated.View 
@@ -65,21 +94,24 @@ const PostureIndicator = ({
         styles.container, 
         {
           opacity: opacityValue,
-          transform: [{ scale: scaleValue }]
+          transform: [
+            { scale: scaleValue },
+            { scale: pulseValue }
+          ],
+          backgroundColor: getBackgroundColor(postureStatus),
+          borderColor: getModernColor(postureStatus) + '30',
         }
       ]}
     >
-      {/* Background Circle */}
-      <View style={styles.backgroundCircle} />
-      
-      {/* Progress Circle */}
+      {/* Progress Circle with SVG-like effect */}
       <View style={styles.progressContainer}>
-        <View style={styles.progressBackground} />
+        <View style={[styles.progressTrack, { borderColor: getModernColor(postureStatus) + '25' }]} />
         <Animated.View
           style={[
-            styles.progressFill,
+            styles.progressRing,
             {
-              backgroundColor: getPostureColor(postureStatus),
+              borderTopColor: getModernColor(postureStatus),
+              borderRightColor: getModernColor(postureStatus),
               transform: [{
                 rotate: animatedValue.interpolate({
                   inputRange: [0, 100],
@@ -91,166 +123,168 @@ const PostureIndicator = ({
         />
       </View>
 
-      {/* Content */}
+      {/* Main Content */}
       <View style={styles.content}>
-        {/* Status Icon */}
-        <Text style={styles.statusIcon}>
-          {getStatusIcon(postureStatus)}
+        {/* Score with Grade */}
+        <View style={styles.scoreContainer}>
+          <Animated.Text style={[styles.score, { color: getModernColor(postureStatus) }]}>
+            {animatedValue.interpolate({
+              inputRange: [0, 100],
+              outputRange: [0, 100],
+            }).__getValue().toFixed(0)}
+          </Animated.Text>
+          <Text style={[styles.grade, { color: getModernColor(postureStatus) }]}>
+            {getScoreGrade(postureScore)}
+          </Text>
+        </View>
+        
+        {/* Status Message */}
+        <Text style={[styles.status, { color: getModernColor(postureStatus) }]}>
+          {getPostureMessage(postureStatus)}
         </Text>
 
-        {/* Score */}
-        <Animated.Text style={styles.score}>
-          {animatedValue.interpolate({
-            inputRange: [0, 100],
-            outputRange: [0, 100],
-          }).__getValue().toFixed(0)}
-        </Animated.Text>
-        <Text style={styles.scoreLabel}>SCORE</Text>
-
-        {/* Status */}
-        <Text style={[styles.status, { color: getPostureColor(postureStatus) }]}>
-          {getPostureMessage(postureStatus).toUpperCase()}
-        </Text>
-
-        {/* Confidence Bar */}
+        {/* Confidence Level */}
         {confidence !== null && (
           <View style={styles.confidenceContainer}>
-            <Text style={styles.confidenceLabel}>
-              Confidence
-            </Text>
-            <View style={styles.confidenceBar}>
-              <Animated.View
-                style={[
-                  styles.confidenceFill,
-                  {
-                    width: `${confidence * 100}%`,
-                    backgroundColor: confidence > 0.7 ? '#10B981' : confidence > 0.4 ? '#F59E0B' : '#EF4444'
-                  }
-                ]}
-              />
+            <Text style={styles.confidenceLabel}>Accuracy</Text>
+            <View style={styles.confidenceBarContainer}>
+              <View style={[styles.confidenceBar, { borderColor: getModernColor(postureStatus) + '30' }]}>
+                <Animated.View
+                  style={[
+                    styles.confidenceFill,
+                    {
+                      width: `${confidence * 100}%`,
+                      backgroundColor: getModernColor(postureStatus),
+                    }
+                  ]}
+                />
+              </View>
+              <Text style={[styles.confidenceText, { color: getModernColor(postureStatus) }]}>
+                {(confidence * 100).toFixed(0)}%
+              </Text>
             </View>
-            <Text style={styles.confidenceText}>
-              {(confidence * 100).toFixed(0)}%
-            </Text>
           </View>
         )}
       </View>
 
-      {/* Reason/Message */}
+      {/* Detailed Reason */}
       {reason && (
-        <View style={styles.reasonContainer}>
+        <View style={[styles.reasonContainer, { borderColor: getModernColor(postureStatus) + '20' }]}>
           <Text style={styles.reasonText} numberOfLines={2}>
             {reason}
           </Text>
         </View>
       )}
 
-      {/* Decorative Elements */}
-      <View style={[styles.decorativeRing, { borderColor: getPostureColor(postureStatus) + '30' }]} />
-      <View style={[styles.decorativeRing2, { borderColor: getPostureColor(postureStatus) + '20' }]} />
+      {/* Status Indicator Dots */}
+      <View style={styles.statusDots}>
+        <View style={[
+          styles.dot,
+          { backgroundColor: postureStatus === 'good' ? '#00D4AA' : 'rgba(255,255,255,0.3)' }
+        ]} />
+        <View style={[
+          styles.dot,
+          { backgroundColor: postureStatus === 'fair' ? '#FFB800' : 'rgba(255,255,255,0.3)' }
+        ]} />
+        <View style={[
+          styles.dot,
+          { backgroundColor: postureStatus === 'bad' ? '#FF6B6B' : 'rgba(255,255,255,0.3)' }
+        ]} />
+      </View>
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    width: 200,
-    height: 200,
+    width: 160,
+    height: 180,
+    borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
     position: 'relative',
-  },
-  backgroundCircle: {
-    position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1.5,
+    paddingVertical: 16,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
     elevation: 8,
   },
   progressContainer: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    top: 20,
   },
-  progressBackground: {
+  progressTrack: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 6,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 4,
   },
-  progressFill: {
+  progressRing: {
     position: 'absolute',
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 6,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 4,
     borderColor: 'transparent',
-    borderTopColor: '#10B981',
   },
   content: {
     alignItems: 'center',
     zIndex: 2,
+    marginTop: 10,
   },
-  statusIcon: {
-    fontSize: 24,
+  scoreContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
     marginBottom: 4,
   },
   score: {
-    color: "#FFFFFF",
-    fontSize: 42,
-    fontWeight: "900",
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 4,
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.5,
   },
-  scoreLabel: {
-    color: "#FFFFFF",
-    fontSize: 10,
+  grade: {
+    fontSize: 14,
     fontWeight: "600",
-    letterSpacing: 1,
+    marginLeft: 4,
     opacity: 0.8,
-    marginTop: -4,
   },
   status: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginTop: 8,
-    letterSpacing: 0.5,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 13,
+    fontWeight: "600",
+    marginBottom: 8,
+    textTransform: 'capitalize',
   },
   confidenceContainer: {
     alignItems: 'center',
-    marginTop: 12,
     width: 120,
   },
   confidenceLabel: {
     fontSize: 10,
-    color: "#FFFFFF",
-    opacity: 0.7,
+    color: 'rgba(255, 255, 255, 0.7)',
     marginBottom: 4,
     fontWeight: '500',
   },
+  confidenceBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
   confidenceBar: {
-    width: 80,
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 2,
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    borderWidth: 1,
     overflow: 'hidden',
+    marginRight: 8,
   },
   confidenceFill: {
     height: '100%',
@@ -258,43 +292,35 @@ const styles = StyleSheet.create({
   },
   confidenceText: {
     fontSize: 10,
-    color: "#FFFFFF",
-    marginTop: 2,
     fontWeight: '600',
+    minWidth: 30,
   },
   reasonContainer: {
     position: 'absolute',
-    bottom: -40,
-    left: -20,
-    right: -20,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    bottom: -35,
+    left: -10,
+    right: -10,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
     borderRadius: 12,
     padding: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   reasonText: {
-    fontSize: 12,
-    color: "#FFFFFF",
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.9)',
     textAlign: "center",
-    lineHeight: 16,
-    opacity: 0.9,
+    lineHeight: 14,
   },
-  decorativeRing: {
+  statusDots: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    borderWidth: 1,
-    borderStyle: 'dashed',
+    bottom: 8,
+    flexDirection: 'row',
+    gap: 6,
   },
-  decorativeRing2: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    borderWidth: 1,
-    borderStyle: 'dotted',
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
 
