@@ -1,97 +1,188 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+## 📱 Posture Detection App
 
-# Getting Started
+A **React Native CLI** mobile application that uses your phone's **front camera** to monitor posture in real-time using **MoveNet** (via TensorFlow\.js) inside a WebView. The app analyzes posture from camera frames and provides visual feedback on posture quality.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## 📦 Installation
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+Follow these simple steps to get the app running on your Android device:
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+1. **Install dependencies**
+   Run the following in your project root:
 
-```sh
-# Using npm
-npm start
+   ```bash
+   npm install
+   ```
 
-# OR using Yarn
-yarn start
+2. **Connect your Android device**
+   Make sure:
+
+   * USB debugging is enabled
+   * Your device is connected via USB
+   * You can verify the device is connected using:
+
+     ```bash
+     adb devices
+     ```
+
+3. **Run the app on Android**
+   Start the app by running:
+
+   ```bash
+   npm run android
+   ```
+
+   This will build and install the app on your connected phone.
+
+> 📌 Make sure Android permissions (camera, audio) are properly set in your `AndroidManifest.xml`.
+
+---
+
+### 📸 Features
+
+* 🔍 Real-time posture detection using **MoveNet Lightning**.
+* 🎥 Live camera preview with **react-native-vision-camera**.
+* 🌐 Pose estimation inside **WebView** with TensorFlow\.js.
+* ✅ Feedback on posture status (`good`, `warning`, `poor`).
+* ⏱️ Session tracking with time and alerts count.
+* 📊 Score-based posture indicator with live updates.
+* 🔄 Switch between front and back camera.
+* 🚫 No server communication – works fully **offline**.
+
+---
+
+### 🧱 Technologies Used
+
+* **React Native CLI**
+* **TensorFlow\.js** (MoveNet) in WebView
+* **react-native-vision-camera** (camera)
+* **react-native-webview** (pose detection)
+* **react-native-fs** (file handling)
+* **Custom Hooks & Components** for posture monitoring
+
+---
+
+### 📂 File Structure (Simplified)
+
+```
+📦root
+ ┣ 📂android_asset/src/html/
+ ┃ ┗ 📄pose.html         # TensorFlow.js pose detection script
+ ┣ 📂components/
+ ┃ ┣ 📄CameraOverlay.jsx
+ ┃ ┣ 📄CameraView.jsx
+ ┃ ┣ 📄TopBar.jsx
+ ┃ ┣ 📄BottomControls.jsx
+ ┃ ┗ 📄PostureIndicator.jsx
+ ┣ 📂hooks/
+ ┃ ┗ 📄usePostureMonitoring.js
+ ┣ 📂utils/
+ ┃ ┗ 📄PostureUtils.jsx
+ ┣ 📄PostureMonitoringScreen.jsx
+ ┗ 📄README.md
 ```
 
-## Step 2: Build and run your app
+---
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+### 🚀 Getting Started
 
-### Android
+#### 1. Clone the repo
 
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+git clone https://github.com/your-username/posture-detection-app.git
+cd posture-detection-app
 ```
 
-### iOS
+#### 2. Install dependencies
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+npm install
 ```
 
-Then, and every time you update your native dependencies, run:
+#### 3. Configure Android/iOS permissions
 
-```sh
-bundle exec pod install
+Make sure the following permissions are added to your `AndroidManifest.xml`:
+
+```xml
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.RECORD_AUDIO"/>
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+#### 4. Build assets
 
-```sh
-# Using npm
-npm run ios
+* Ensure `pose.html` is copied into:
 
-# OR using Yarn
-yarn ios
+  * Android: `android/app/src/main/assets/src/html/pose.html`
+  * iOS: placed under `ios/YourAppName/Bundle/` and referenced using `RNFS.MainBundlePath`
+
+#### 5. Start the app
+
+```bash
+npx react-native run-android
+# or
+npx react-native run-ios
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+---
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+### 🧠 How It Works
 
-## Step 3: Modify your app
+1. The app uses the **VisionCamera** to capture photos every few seconds.
+2. The photo is encoded to base64 and sent to a **WebView** containing `pose.html`.
+3. `pose.html` loads TensorFlow\.js and the MoveNet model to estimate body keypoints.
+4. Posture is analyzed using logic based on head, neck, and shoulder alignment.
+5. Posture data is returned to the app, and the UI updates the session stats.
 
-Now that you have successfully run the app, let's make changes!
+---
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+### 🧪 Posture Analysis Output Example
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+```json
+{
+  "posture": "good",
+  "confidence": 0.66,
+  "reason": "Slight forward head posture",
+  "score": 90,
+  "details": {
+    "left_ear": {...},
+    "left_shoulder": {...}
+  }
+}
+```
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+---
 
-## Congratulations! :tada:
+### 📦 Dependencies
 
-You've successfully run and modified your React Native App. :partying_face:
+```json
+{
+  "@tensorflow/tfjs": "^4.x",
+  "@tensorflow-models/pose-detection": "^3.x",
+  "react-native-vision-camera": "^2.x",
+  "react-native-webview": "^13.x",
+  "react-native-fs": "^2.x"
+}
+```
 
-### Now what?
+---
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+### 📌 TODO
 
-# Troubleshooting
+* [ ] Add history of posture over time
+* [ ] Export session summary report
+* [ ] Show full body skeleton in UI
+* [ ] Add haptic/audio alerts for poor posture
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+---
 
-# Learn More
+### 📸 Screenshots
 
-To learn more about React Native, take a look at the following resources:
+*Add screenshots here if available for better presentation.*
+![WhatsApp Image 2025-06-19 at 12 23 01_20c14d99](https://github.com/user-attachments/assets/18507cc2-2241-49c1-baa1-aa9a816be1aa)
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+---
+
+### 📃 License
+
+MIT © 2025 
